@@ -6,7 +6,7 @@ module Argtrace
   class Error < StandardError; end
   
   class CallInfo
-    attr_accessor :defined_class, :method_id, :param_types, :return_type, :block_proc
+    attr_accessor :signature, :block_proc
   end
 
   class CallStack
@@ -21,14 +21,17 @@ module Argtrace
     def pop_callstack(tp)
       ent = @stack.pop
       if ent
-        if tp.method_id != ent.method_id
-          raise "callstack is broken ret:#{tp.method_id} <=> stack:#{ent.method_id}"
+        if tp.method_id != ent.signature.method_id
+          raise "callstack is broken ret:#{tp.method_id} <=> stack:#{ent.signature.method_id}"
         end
-        ent.return_type = tp.return_value.class
+        type = TypeUnion.new
+        type.add(Type.new_with_value(tp.return_value))
+        ent.signature.return_type = type
       end
       return ent
     end
 
+    # find callinfo which use specific block
     def find_by_block_location(path, lineno)
       ret = []
       @stack.each do |info|
@@ -40,14 +43,173 @@ module Argtrace
     end
   end
 
-  class ParamType
+  class Signature
+    attr_accessor :defined_class, :method_id, :params, :return_type
+
+    def initialize
+      @params = []
+    end
+
+    def merge(all_params)
+      normal_params = all_params.select{|p| p.mode == :req || p.mode == :opt}
+      for i in 0...normal_params.size
+        if i == @params.size
+          @params << normal_params[i]  # TODO: dup
+        else
+          if @params[i].mode == normal_params[i].mode &&
+              @params[i].name == normal_params[i].name
+            @params[i].type.merge_union(normal_params[i].type)
+          else
+            raise "signature change not supported"
+          end
+          
+        end
+      end
+    end
+
+    def get_block_param
+      @params.find{|x| x.mode == :block}
+    end
+
+    def to_s
+      "Signature(#{@defined_class}::#{@method_id}(" + @params.map{|x| x.to_s}.join(",") + ") => #{@return_type.to_s})"
+    end
+
+    def inspect
+      to_s
+    end
+  end
+
+  class Parameter
     attr_accessor :mode, :name, :type
+
+    def hash
+      [@mode, @name, @type].hash
+    end
+
+    def to_s
+      "Parameter(#{@name}@#{@mode}:#{@type.to_s})"
+    end
+
+    def inspect
+      to_s
+    end
+  end
+
+  class TypeUnion
+    attr_accessor :union;
+
+    def initialize
+      @union = []
+    end
+
+    def merge_union(other_union)
+      other_union.union.each do |type|
+        self.add(type)
+      end
+    end
+
+    def add(type)
+      for i in 0...@union.size
+        if @union[i] == type
+          # already in union
+          return
+        end
+        if type.superclass_of?(@union[i])
+          # remove redundant element
+          @union[i] = nil
+        end
+      end
+      @union.compact!
+      @union << type
+      self
+    end
+
+    def to_s
+      if @union.empty?
+        "TypeUnion(None)"
+      else
+        "TypeUnion(" + @union.map{|x| x.to_s}.join("|") + ")"
+      end
+    end
+
+    def inspect
+      to_s
+    end
+  end
+
+  class BooleanClass
+  end
+
+  class Type
+    attr_accessor :data;
+
+    def initialize()
+      @data = nil
+    end
+
+    def self.new_with_type(actual_type)
+      ret = Type.new
+      ret.data = actual_type
+      return ret
+    end
+
+    def self.new_with_value(actual_value)
+      ret = Type.new
+      if actual_value.is_a?(Symbol)
+        # use symbol as type
+        ret.data = actual_value
+      elsif actual_value == true || actual_value == false
+        # treat true and false as boolean
+        ret.data = BooleanClass
+      else
+        ret.data = actual_value.class
+      end
+      return ret
+    end
+
+    def hash
+      @data.hash
+    end
+
+    def ==(other)
+      if other.class != Type
+        return false
+      end
+      return @data == other.data
+    end
+
+    def superclass_of?(other)
+      if other.class != Type
+        raise TypeError, "parameter must be Argtrace::Type"
+      end
+      if @data.is_a?(Symbol)
+        return false
+      elsif other.data.is_a?(Symbol)
+        return false
+      else
+        return other.data < @data
+      end
+    end
+
+    def to_s
+      if @data.is_a?(Symbol)
+        @data
+      else
+        @data
+      end
+    end
+
+    def inspect
+      to_s
+    end
   end
 
   class Tracer
     def initialize(&notify_block)
       @notify_block = notify_block
       @callstack = CallStack.new
+      @tp_holder = nil
     end
 
     # entry point of trace event
@@ -68,10 +230,10 @@ module Argtrace
       # I cannot determine the called block instance directly, so use block's location.
       callinfos_with_block = @callstack.find_by_block_location(tp.path, tp.lineno)
       callinfos_with_block.each do |callinfo|
-        # TODO:
+        block_param = callinfo.signature.get_block_param
+        block_param_types = get_param_types(callinfo.block_proc.parameters, tp)
+        block_param.type.merge(block_param_types)
       end
-      # TODO:
-      # @notify_block.call(tp)
     end
 
     # process method call/return event
@@ -80,9 +242,12 @@ module Argtrace
         called_method = get_called_method(tp)
 
         callinfo = CallInfo.new
-        callinfo.defined_class = tp.defined_class
-        callinfo.method_id = tp.method_id
-        callinfo.param_types = get_param_types(called_method.parameters, tp)
+        signature = Signature.new
+        signature.defined_class = tp.defined_class
+        signature.method_id = tp.method_id
+        signature.params = get_param_types(called_method.parameters, tp)
+        callinfo.signature = signature
+        callinfo.block_proc = get_block_param_value(called_method.parameters, tp)
         @callstack.push_callstack(callinfo)
         @notify_block.call(tp.event, callinfo)
       else
@@ -93,7 +258,7 @@ module Argtrace
       end
     end
 
-    # convert parameters to ParamType[]
+    # convert parameters to Parameter[]
     def get_param_types(parameters, tp)
       if tp.event == :c_call
         # I cannot get parameter values of c_call ...
@@ -101,12 +266,33 @@ module Argtrace
       else
         return parameters.map{|param|
           # param[0]=:req, param[1]=:x
-          type = ParamType.new
-          type.mode = param[0]
-          type.name = param[1]
-          type.type = tp.binding.eval(param[1].to_s).class
-          type
+          p = Parameter.new
+          p.mode = param[0]
+          p.name = param[1]
+          if param[0] == :block
+            p.type = Signature.new
+          else
+            type = TypeUnion.new
+            type.add Type.new_with_value(tp.binding.eval(param[1].to_s))
+            p.type = type
+          end
+          p
         }
+      end
+    end
+
+    # pickup block parameter as proc if exists
+    def get_block_param_value(parameters, tp)
+      if tp.event == :c_call
+        # I cannot get parameter values of c_call ...
+        return nil
+      else
+        parameters.each do |param|
+          if param[0] == :block
+            return tp.binding.eval(param[1].to_s)
+          end
+        end
+        return nil
       end
     end
 
@@ -152,6 +338,18 @@ module Argtrace
       return false
     end
 
+    def start
+      @tp_holder.enable
+    end
+
+    def stop
+      @tp_holder.disable
+    end
+
+    def tp_holder=(tp)
+      @tp_holder = tp
+    end
+
     # start TracePoint with callback block
     def self.start(&notify_block)
       tracer = Tracer.new(&notify_block)
@@ -163,13 +361,16 @@ module Argtrace
           tp.enable
         end
       end
+      tracer.tp_holder = tp
 
       at_exit do
-        tp.disable
+        # hold reference in closure
+        tracer.stop
       end
 
       tp.enable
       return tracer
     end
+
   end
 end
