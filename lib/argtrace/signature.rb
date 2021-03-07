@@ -113,10 +113,11 @@ module Argtrace
   end
 
   class Type
-    attr_accessor :data;
+    attr_accessor :data, :subdata
 
     def initialize()
       @data = nil
+      @subdata = nil
     end
 
     def self.new_with_type(actual_type)
@@ -134,6 +135,16 @@ module Argtrace
         # warn: operands of == must in this order, because of override.
         # treat true and false as boolean
         ret.data = BooleanClass
+      elsif actual_value.class == Array
+        # TODO: multi type array
+        ret.data = Array
+        unless actual_value.empty?
+          if true == actual_value.first || false == actual_value.first
+            ret.subdata = BooleanClass
+          else
+            ret.subdata = actual_value.first.class
+          end
+        end
       else
         ret.data = actual_value.class
       end
@@ -148,7 +159,7 @@ module Argtrace
       if other.class != Type
         return false
       end
-      return @data == other.data
+      return @data == other.data && @subdata == other.subdata
     end
 
     # true if self(Type) includes other(Type) as type declaration
@@ -160,6 +171,19 @@ module Argtrace
         return false
       elsif other.data.is_a?(Symbol)
         return false
+      elsif @data == Array && other.data == Array
+        # TODO: merge for Array type like:
+        #   Array[X] | Array[Y]  =>  Array[X|Y]
+        if @subdata
+          if other.subdata
+            return other.subdata < @subdata
+          else
+            return true
+          end
+        else
+          # if self Array is untyped, cannot replace other as declaration.
+          return false
+        end
       else
         return other.data < @data
       end
@@ -167,7 +191,13 @@ module Argtrace
 
     def to_s
       if @data.is_a?(Symbol)
-        @data
+        @data.inspect
+      elsif @data == Array
+        if @subdata
+          "Array[#{@subdata}]"
+        else
+          @data
+        end
       else
         @data.to_s
       end

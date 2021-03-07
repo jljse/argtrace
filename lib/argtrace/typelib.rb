@@ -35,7 +35,7 @@ module Argtrace
     end
 
     def to_rbs
-      
+
     end
   end
 
@@ -44,11 +44,12 @@ end
 typelib = Argtrace::TypeLib.new
 tracer = Argtrace::Tracer.new
 tracer.set_filter do |tp|
-  if tracer.part_of_module?(tp.defined_class, "Nokogiri")
-    true
-  else
-    false
-  end
+  # if tracer.part_of_module?(tp.defined_class, "Nokogiri")
+  #   true
+  # else
+  #   false
+  # end
+  true
 end
 tracer.set_notify do |ev, callinfo|
   if ev == :return
@@ -62,7 +63,7 @@ tracer.set_exit do
     puts "----------"
     puts klass.to_s
     [0, 1].each do |index|
-      klass_methods.keys.each do |method_id|
+      klass_methods.keys.sort.each do |method_id|
         sig = klass_methods[method_id][index]
         next unless sig
 
