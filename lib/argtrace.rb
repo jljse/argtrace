@@ -3,6 +3,7 @@
 require_relative "argtrace/version"
 require_relative "argtrace/signature.rb"
 require_relative "argtrace/tracer.rb"
+require_relative "argtrace/typelib.rb"
 
 module Argtrace
   class ArgtraceError < StandardError; end

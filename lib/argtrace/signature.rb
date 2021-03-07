@@ -2,13 +2,19 @@
 module Argtrace
 
   class Signature
-    attr_accessor :defined_class, :method_id, :params, :return_type
+    attr_accessor :defined_class, :method_id, :is_singleton_method, :params, :return_type
 
     def initialize
+      @is_singleton_method = false
       @params = []
     end
 
-    def merge(all_params)
+    def merge(all_params, ret)
+      # TODO: kwargs
+
+      unless @params
+        @params = []
+      end
       normal_params = all_params.select{|p| p.mode == :req || p.mode == :opt}
       for i in 0...normal_params.size
         if i == @params.size
@@ -22,6 +28,13 @@ module Argtrace
           end
           
         end
+      end
+
+      if ret
+        unless @return_type
+          @return_type = TypeUnion.new
+        end
+        @return_type.merge_union(ret)
       end
     end
 

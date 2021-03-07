@@ -57,11 +57,18 @@ module Argtrace
   class Tracer
     attr_accessor :is_dead
 
-    def initialize(&notify_block)
-      @notify_block = notify_block
+    def initialize()
+      @notify_block = nil
       @callstack = CallStack.new
       @tp_holder = nil
       @is_dead = false
+
+      # prune_event_count > 0 while no need to notify.
+      # This is used to avoid undesirable signature lerning caused by error test.
+      @prune_event_count = 0
+
+      # cache of singleton-class => basic-class
+      @singleton_class_map_cache = {}
     end
 
     # entry point of trace event
@@ -84,7 +91,8 @@ module Argtrace
       callinfos_with_block.each do |callinfo|
         block_param = callinfo.signature.get_block_param
         block_param_types = get_param_types(callinfo.block_proc.parameters, tp)
-        block_param.type.merge(block_param_types)
+        # TODO: return type (but maybe, there is no demand)
+        block_param.type.merge(block_param_types, nil)
       end
     end
 
@@ -95,22 +103,90 @@ module Argtrace
         # and called_method.parameters not work.
         # called_method = get_called_method(tp)
 
+        case check_event_filter(tp)
+        when :prune
+          @prune_event_count += 1
+          skip_flag = true
+        when false
+          skip_flag = true
+        end
+
         callinfo = CallInfo.new
         signature = Signature.new
-        signature.defined_class = tp.defined_class
+        signature.defined_class = non_singleton_class(tp.defined_class)
         signature.method_id = tp.method_id
+        signature.is_singleton_method = tp.defined_class.singleton_class?
         signature.params = get_param_types(tp.parameters, tp)
         callinfo.signature = signature
         callinfo.block_proc = get_block_param_value(tp.parameters, tp)
 
         @callstack.push_callstack(callinfo)
-        @notify_block.call(tp.event, callinfo)
-      else
-        callinfo = @callstack.pop_callstack(tp)
-        if callinfo
+
+        if !skip_flag && @prune_event_count == 0
+          # skip if it's object specific method
           @notify_block.call(tp.event, callinfo)
         end
+      else
+        case check_event_filter(tp)
+        when :prune
+          @prune_event_count -= 1
+          skip_flag = true
+        when false
+          skip_flag = true
+        end
+
+        callinfo = @callstack.pop_callstack(tp)
+        if callinfo
+          if !skip_flag && @prune_event_count == 0
+            @notify_block.call(tp.event, callinfo)
+          end
+        end
       end
+    end
+
+    def part_of_module?(klass, mod)
+      ks = non_singleton_class(klass).to_s
+      ms = mod.to_s
+      return ks == ms || ks.start_with?(ms + "::")
+    end
+
+    # convert singleton class (like #<Class:Regexp>) to non singleton class (like Regexp)
+    def non_singleton_class(klass)
+      unless klass.singleton_class?
+        return klass
+      end
+
+      if /^#<Class:([A-Za-z0-9_:]+)>$/ =~ klass.inspect
+        # maybe normal name class
+        klass_name = Regexp.last_match[1]
+        begin
+          ret_klass = klass_name.split('::').inject(Kernel){|nm, sym| nm.const_get(sym)}
+        rescue => e
+          $stderr.puts "----- argtrace bug -----"
+          $stderr.puts "cannot convert class name #{klass} => #{klass_name}"
+          $stderr.puts e.full_message
+          $stderr.puts "------------------------"
+          raise
+        end
+        return ret_klass
+      end
+
+      # maybe this class is object's singleton class / special named class.
+      # I can't find efficient way, so cache the calculated result.
+      if @singleton_class_map_cache.key?(klass)
+        return @singleton_class_map_cache[klass]
+      end
+      begin
+        ret_klass = ObjectSpace.each_object(Module).find{|x| x.singleton_class == klass}
+        @singleton_class_map_cache[klass] = ret_klass
+      rescue => e
+        $stderr.puts "----- argtrace bug -----"
+        $stderr.puts "cannot convert class name #{klass} => #{klass_name}"
+        $stderr.puts e.full_message
+        $stderr.puts "------------------------"
+        raise
+      end
+      return ret_klass
     end
 
     # convert parameters to Parameter[]
@@ -132,6 +208,8 @@ module Argtrace
           elsif param[0] == :block
             p.type = Signature.new
           else
+            # TODO: this part is performance bottleneck caused by eval,
+            # but It's essential code
             type = TypeUnion.new
             begin
               val = tp.binding.eval(param[1].to_s)
@@ -227,44 +305,72 @@ module Argtrace
       return false
     end
 
-    def start
+    # check filter from set_filter
+    def check_event_filter(tp)
+      if @prune_event_filter
+        return @prune_event_filter.call(tp)
+      else
+        return true
+      end
+    end
+
+    # set event filter
+    #   true = normal process
+    #   false = skip notify
+    #   :prune = skip notify and skip all nested events
+    def set_filter(&prune_event_filter)
+      @prune_event_filter = prune_event_filter
+    end
+
+    def set_exit(&exit_block)
+      @exit_block = exit_block
+    end
+
+    def set_notify(&notify_block)
+      @notify_block = notify_block
+    end
+
+    def enable
       @tp_holder.enable
     end
 
-    def stop
+    def disable
       @tp_holder.disable
     end
 
-    def tp_holder=(tp)
-      @tp_holder = tp
-    end
-
     # start TracePoint with callback block
-    def self.start(&notify_block)
-      tracer = Tracer.new(&notify_block)
+    def start_trace()
       tp = TracePoint.new(:c_call, :c_return, :call, :return, :b_call) do |tp|
         begin
           tp.disable
           # DEBUG:
           # p [tp.event, tp.defined_class, tp.method_id]
-          tracer.trace(tp)
+          self.trace(tp)
         rescue => e
           $stderr.puts "----- argtrace catch exception -----"
           $stderr.puts e.full_message
           $stderr.puts "------------------------------------"
-          tracer.is_dead = true
+          @is_dead = true
         ensure
-          tp.enable unless tracer.is_dead
+          tp.enable unless @is_dead
         end
       end
-      tracer.tp_holder = tp
+      @tp_holder = tp
 
       at_exit do
-        # hold reference in closure
-        tracer.stop
+        # hold Tracer reference in closure
+        self.disable
+        @exit_block.call if @exit_block
       end
 
       tp.enable
+    end
+
+    # convinience method
+    def self.start(&notify_block)
+      tracer = Tracer.new()
+      tracer.set_notify(&notify_block)
+      tracer.start_trace()
       return tracer
     end
 
