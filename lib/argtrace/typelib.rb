@@ -30,8 +30,12 @@ module Argtrace
       return pair[index]
     end
 
-    def lern(signature)
+    def learn(signature)
       ready_signature(signature).merge(signature.params, signature.return_type)
+    end
+
+    def to_rbs
+      
     end
   end
 
@@ -48,7 +52,7 @@ tracer.set_filter do |tp|
 end
 tracer.set_notify do |ev, callinfo|
   if ev == :return
-    typelib.lern(callinfo.signature)
+    typelib.learn(callinfo.signature)
   end
 end
 tracer.set_exit do
