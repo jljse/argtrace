@@ -3,7 +3,7 @@
 require_relative "argtrace/version"
 
 module Argtrace
-  class Error < StandardError; end
+  class ArgtraceError < StandardError; end
   
   class CallInfo
     attr_accessor :signature, :block_proc
@@ -11,18 +11,33 @@ module Argtrace
 
   class CallStack
     def initialize
-      @stack = []
+      # thread.object_id => stack
+      @stack = Hash.new{|h,k| h[k] = []}
     end
   
     def push_callstack(callinfo)
-      @stack.push callinfo
+      id = Thread.current.object_id
+      # DEBUG:
+      # p "[#{id}]>>" + " "*@stack[id].size*2 + callinfo.signature.to_s
+
+      @stack[id].push callinfo
     end
   
     def pop_callstack(tp)
-      ent = @stack.pop
+      id = Thread.current.object_id
+      ent = @stack[id].pop
       if ent
+        # DEBUG:
+        # p "[#{id}]<<" + " "*@stack[id].size*2 + ent.signature.to_s
+
         if tp.method_id != ent.signature.method_id
-          raise "callstack is broken ret:#{tp.method_id} <=> stack:#{ent.signature.method_id}"
+          raise <<~EOF
+            callstack is broken
+            returning by tracepoint: #{tp.defined_class}::#{tp.method_id}
+            top of stack: #{ent.signature.to_s}
+            rest of stack:
+              #{@stack[id].map{|x| x.signature.to_s}.join("\n  ")}
+          EOF
         end
         type = TypeUnion.new
         type.add(Type.new_with_value(tp.return_value))
@@ -33,8 +48,9 @@ module Argtrace
 
     # find callinfo which use specific block
     def find_by_block_location(path, lineno)
+      id = Thread.current.object_id
       ret = []
-      @stack.each do |info|
+      @stack[id].each do |info|
         if info.block_proc && info.block_proc.source_location == [path, lineno]
           ret << info
         end
@@ -159,7 +175,8 @@ module Argtrace
       if actual_value.is_a?(Symbol)
         # use symbol as type
         ret.data = actual_value
-      elsif actual_value == true || actual_value == false
+      elsif true == actual_value || false == actual_value
+        # warn: operands of == must in this order, because of override.
         # treat true and false as boolean
         ret.data = BooleanClass
       else
@@ -179,6 +196,7 @@ module Argtrace
       return @data == other.data
     end
 
+    # true if self(Type) includes other(Type) as type declaration
     def superclass_of?(other)
       if other.class != Type
         raise TypeError, "parameter must be Argtrace::Type"
@@ -196,7 +214,7 @@ module Argtrace
       if @data.is_a?(Symbol)
         @data
       else
-        @data
+        @data.to_s
       end
     end
 
@@ -206,10 +224,13 @@ module Argtrace
   end
 
   class Tracer
+    attr_accessor :is_dead
+
     def initialize(&notify_block)
       @notify_block = notify_block
       @callstack = CallStack.new
       @tp_holder = nil
+      @is_dead = false
     end
 
     # entry point of trace event
@@ -239,15 +260,18 @@ module Argtrace
     # process method call/return event
     def trace_method_event(tp)
       if [:call, :c_call].include?(tp.event)
-        called_method = get_called_method(tp)
+        # I don't know why but tp.parameters is different from called_method.parameters
+        # and called_method.parameters not work.
+        # called_method = get_called_method(tp)
 
         callinfo = CallInfo.new
         signature = Signature.new
         signature.defined_class = tp.defined_class
         signature.method_id = tp.method_id
-        signature.params = get_param_types(called_method.parameters, tp)
+        signature.params = get_param_types(tp.parameters, tp)
         callinfo.signature = signature
-        callinfo.block_proc = get_block_param_value(called_method.parameters, tp)
+        callinfo.block_proc = get_block_param_value(tp.parameters, tp)
+
         @callstack.push_callstack(callinfo)
         @notify_block.call(tp.event, callinfo)
       else
@@ -269,11 +293,25 @@ module Argtrace
           p = Parameter.new
           p.mode = param[0]
           p.name = param[1]
-          if param[0] == :block
+          if param[1] == :* || param[1] == :&
+            # workaround for ActiveSupport gem.
+            # I don't know why this happen. just discard info about it.
+            type = TypeUnion.new
+            p.type = type
+          elsif param[0] == :block
             p.type = Signature.new
           else
             type = TypeUnion.new
-            type.add Type.new_with_value(tp.binding.eval(param[1].to_s))
+            begin
+              val = tp.binding.eval(param[1].to_s)
+            rescue => e
+              $stderr.puts "----- argtrace bug -----"
+              $stderr.puts parameters.inspect
+              $stderr.puts e.full_message
+              $stderr.puts "------------------------"
+              raise
+            end
+            type.add Type.new_with_value(val)
             p.type = type
           end
           p
@@ -289,7 +327,21 @@ module Argtrace
       else
         parameters.each do |param|
           if param[0] == :block
-            return tp.binding.eval(param[1].to_s)
+            if param[1] == :&
+              # workaround for ActiveSupport gem.
+              # I don't know why this happen. just discard info about it.
+              return nil
+            end
+            begin
+              val = tp.binding.eval(param[1].to_s)
+            rescue => e
+              $stderr.puts "----- argtrace bug -----"
+              $stderr.puts parameters.inspect
+              $stderr.puts e.full_message
+              $stderr.puts "------------------------"
+              raise
+            end
+            return val
           end
         end
         return nil
@@ -310,7 +362,7 @@ module Argtrace
           raise "type inconsistent def:#{tp.defined_class} <=> self:#{tp.self.class} "
         end
       end
-      called_method = tp.self.method(tp.method_id)
+      return tp.self.method(tp.method_id)
     end
 
     # true for the unhandleable events
@@ -330,6 +382,12 @@ module Argtrace
       end
     
       if tp.defined_class.equal?(Class) and tp.method_id == :inherited
+        # I can't understand this.
+        # Just ignore.
+        return true
+      end
+    
+      if tp.defined_class.equal?(Module) and tp.method_id == :method_added
         # I can't understand this.
         # Just ignore.
         return true
@@ -356,9 +414,16 @@ module Argtrace
       tp = TracePoint.new(:c_call, :c_return, :call, :return, :b_call) do |tp|
         begin
           tp.disable
+          # DEBUG:
+          # p [tp.event, tp.defined_class, tp.method_id]
           tracer.trace(tp)
+        rescue => e
+          $stderr.puts "----- argtrace catch exception -----"
+          $stderr.puts e.full_message
+          $stderr.puts "------------------------------------"
+          tracer.is_dead = true
         ensure
-          tp.enable
+          tp.enable unless tracer.is_dead
         end
       end
       tracer.tp_holder = tp
@@ -374,3 +439,4 @@ module Argtrace
 
   end
 end
+
