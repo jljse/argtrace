@@ -263,9 +263,9 @@ module Argtrace
         # I cannot identify all cases for this, so checks strictly.
 
         if tp.defined_class.singleton_class?
-          # On class method call, "defined_class" becomes singleton(singular) class, so just let it go.
+          # On class method call, "defined_class" becomes singleton(singular) class.
         elsif tp.self.is_a?(tp.defined_class)
-          # On ancestor's method call, "defined_class" is different from self.class, as expected.
+          # On ancestor's method call, "defined_class" is different from self.class.
         else
           # This is unknown case.
           raise "type inconsistent def:#{tp.defined_class} <=> self:#{tp.self.class} "

@@ -15,18 +15,23 @@ module Argtrace
       unless @params
         @params = []
       end
-      normal_params = all_params.select{|p| p.mode == :req || p.mode == :opt}
-      for i in 0...normal_params.size
+      for i in 0...all_params.size
         if i == @params.size
-          @params << normal_params[i]  # TODO: dup
+          @params << all_params[i]  # TODO: dup
         else
-          if @params[i].mode == normal_params[i].mode &&
-              @params[i].name == normal_params[i].name
-            @params[i].type.merge_union(normal_params[i].type)
+          if @params[i].mode == all_params[i].mode &&
+              @params[i].name == all_params[i].name
+            if all_params[i].mode == :block
+              # TODO: buggy
+              # merging of block parameter type is quite tricky...
+              # @params[i].type.merge(
+              #   all_params[i].type.params, nil)
+            else
+              @params[i].type.merge_union(all_params[i].type)
+            end
           else
             raise "signature change not supported"
           end
-          
         end
       end
 

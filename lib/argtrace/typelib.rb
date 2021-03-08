@@ -143,15 +143,39 @@ module Argtrace
     def sig_to_rbs(indent_level, signature)
       indent = "  " * indent_level
       sig_name = signature.is_singleton_method ? "self.#{signature.method_id}" : signature.method_id
-      # TODO: opt, kwarg, block
-      params = signature.params.map{|p| "#{p.name}: #{type_union_to_rbs(p.type)}"}.join(", ")
+      # TODO: block param
+      params = signature.params
+        .filter{|p| p.mode != :block}
+        .map{|p| param_to_rbs(p)}
+        .compact
+        .join(", ")
       rettype = type_union_to_rbs(signature.return_type)
       return "#{indent}def #{sig_name} : (#{params}) -> #{rettype}"
     end
 
+    def param_to_rbs(param)
+      case param.mode
+      when :req
+        return "#{type_union_to_rbs(param.type)} #{param.name}"
+      when :opt
+        return "?#{type_union_to_rbs(param.type)} #{param.name}"
+      when :keyreq
+        return "#{param.name}: #{type_union_to_rbs(param.type)}"
+      when :key
+        return "?#{param.name}: #{type_union_to_rbs(param.type)}"
+      when :block
+        return nil
+      end
+    end
+
     def type_union_to_rbs(typeunion)
       # TODO: use "?" for nil
-      return typeunion.union.map{|type| type_to_rbs(type)}.join("|")
+      ret = typeunion.union.map{|type| type_to_rbs(type)}.join("|")
+      if ret == "nil"
+        return "untyped"
+      else
+        return ret
+      end
     end
 
     def type_to_rbs(type)
@@ -182,6 +206,13 @@ module Argtrace
 
 end
 
+module Nokogiri
+  class TESTX
+    def foo(x: , a: 0, b: "test")
+    end
+  end
+end
+
 typelib = Argtrace::TypeLib.new
 tracer = Argtrace::Tracer.new
 tracer.set_filter do |tp|
@@ -200,3 +231,4 @@ tracer.set_exit do
   puts typelib.to_rbs
 end
 tracer.start_trace
+Nokogiri::TESTX.new.foo(x: 1)
