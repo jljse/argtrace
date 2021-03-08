@@ -35,9 +35,9 @@ module Argtrace
     end
 
     def to_rbs
-      # TODO: make module/class tree
       # TODO: should I output class inheritance info ?
       # TODO: private/public
+      # TODO: attr_reader/attr_writer/attr_accessor
       mod_root = OutputModule.new
 
       @lib.keys.sort_by{|x| x.to_s}.each do |klass|
@@ -143,7 +143,6 @@ module Argtrace
     def sig_to_rbs(indent_level, signature)
       indent = "  " * indent_level
       sig_name = signature.is_singleton_method ? "self.#{signature.method_id}" : signature.method_id
-      # TODO: block param
       params = signature.params
         .filter{|p| p.mode != :block}
         .map{|p| param_to_rbs(p)}
@@ -180,13 +179,22 @@ module Argtrace
     end
 
     def type_union_to_rbs(typeunion)
-      # TODO: use "?" for nil
-      ret = typeunion.union.map{|type| type_to_rbs(type)}.join("|")
-      if ret == "nil"
+      if typeunion.union.size == 0
         return "untyped"
-      else
-        return ret
       end
+      # TODO: ugly
+      if typeunion.union.size == 1 and NilClass == typeunion.union.first.data
+        # TODO: I can't distinguish nil and untyped.
+        return "untyped"
+      end
+      if typeunion.union.size == 2 and typeunion.union.any?{|x| NilClass == x.data}
+        # type is nil and sometype, so represent it as "sometype?"
+        sometype = typeunion.union.find{|x| NilClass != x.data}
+        return "#{type_to_rbs(sometype)}?"
+      end
+
+      ret = typeunion.union.map{|type| type_to_rbs(type)}.join("|")
+      return ret
     end
 
     def type_to_rbs(type)
