@@ -10,11 +10,10 @@ module Argtrace
     end
 
     def merge(all_params, ret)
-      # TODO: kwargs
-
       unless @params
         @params = []
       end
+      # all params (including optional / keyword etc)
       for i in 0...all_params.size
         if i == @params.size
           @params << all_params[i]  # TODO: dup
@@ -24,8 +23,8 @@ module Argtrace
             if all_params[i].mode == :block
               # TODO: buggy
               # merging of block parameter type is quite tricky...
-              # @params[i].type.merge(
-              #   all_params[i].type.params, nil)
+              @params[i].type.merge(
+                all_params[i].type.params, nil)
             else
               @params[i].type.merge_union(all_params[i].type)
             end

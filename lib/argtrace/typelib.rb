@@ -228,7 +228,7 @@ end
 module Nokogiri
   class TESTX
     def foo(x: , a: 0, b: "test", &block)
-      block.call(100)
+      block.call(x)
     end
   end
 end
@@ -252,3 +252,4 @@ tracer.set_exit do
 end
 tracer.start_trace
 Nokogiri::TESTX.new.foo(x: 1){|x| }
+Nokogiri::TESTX.new.foo(x: "1"){|x| }
