@@ -150,7 +150,18 @@ module Argtrace
         .compact
         .join(", ")
       rettype = type_union_to_rbs(signature.return_type)
-      return "#{indent}def #{sig_name} : (#{params}) -> #{rettype}"
+      blocktype = blocktype_to_rbs(signature.params.find{|p| p.mode == :block})
+      return "#{indent}def #{sig_name} : (#{params})#{blocktype} -> #{rettype}"
+    end
+
+    def blocktype_to_rbs(blockparam)
+      unless blockparam
+        return ""
+      end
+      params = blockparam.type.params
+        .map{|p| type_union_to_rbs(p.type)}
+        .join(", ")
+      return " { (#{params}) -> untyped }"
     end
 
     def param_to_rbs(param)
@@ -208,7 +219,8 @@ end
 
 module Nokogiri
   class TESTX
-    def foo(x: , a: 0, b: "test")
+    def foo(x: , a: 0, b: "test", &block)
+      block.call(100)
     end
   end
 end
@@ -231,4 +243,4 @@ tracer.set_exit do
   puts typelib.to_rbs
 end
 tracer.start_trace
-Nokogiri::TESTX.new.foo(x: 1)
+Nokogiri::TESTX.new.foo(x: 1){|x| }
