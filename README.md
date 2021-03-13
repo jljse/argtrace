@@ -28,33 +28,13 @@ Or install it yourself as:
 
 ```ruby
 require 'argtrace'
-
-typelib = Argtrace::TypeLib.new
-tracer = Argtrace::Tracer.new
-tracer.set_filter do |tp|
-  # you can filter event by Module nesting
-  # return tracer.under_module?(tp.defined_class, "Nokogiri")
-
-  # or by method location
-  return tracer.under_path?(tp.defined_class, tp.method_id, __dir__)
-end
-tracer.set_notify do |ev, callinfo|
-  if ev == :return
-    typelib.learn(callinfo.signature)
-  end
-end
-tracer.set_exit do
-  puts typelib.to_rbs
-end
-tracer.start_trace
+Argtrace::AutoTrace.main()
 
 ... (YOUR PROGRAM HERE) ...
 ```
 
 ### 2. Implicit trace
-```console
-$ ruby -m argtrace  YOUR_PROGRAM_HERE.rb
-```
+Currently not supported yet.
 
 ## Contributing
 
