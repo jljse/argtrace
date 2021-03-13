@@ -236,7 +236,8 @@ end
 typelib = Argtrace::TypeLib.new
 tracer = Argtrace::Tracer.new
 tracer.set_filter do |tp|
-  if tracer.part_of_module?(tp.defined_class, "Nokogiri")
+  # if tracer.under_module?(tp.defined_class, "Nokogiri")
+  if tracer.under_path?(tp.defined_class, tp.method_id, __dir__)
     true
   else
     false

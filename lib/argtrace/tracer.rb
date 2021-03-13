@@ -69,6 +69,9 @@ module Argtrace
 
       # cache of singleton-class => basic-class
       @singleton_class_map_cache = {}
+
+      # cache of method location (klass => method_id => source_path)
+      @method_location_cache = Hash.new{|h, klass| h[klass] = {}}
     end
 
     # entry point of trace event
@@ -144,7 +147,25 @@ module Argtrace
       end
     end
 
-    def part_of_module?(klass, mod)
+    def under_path?(klass, method_id, path)
+      source_path = get_location(klass, method_id)
+      return source_path && source_path.start_with?(path)
+    end
+
+    def get_location(klass, method_id)
+      unless @method_location_cache[klass].key?(method_id)
+        path = nil
+        m = klass.instance_method(method_id)
+        if m and m.source_location
+          path = m.source_location[0]
+        end
+        @method_location_cache[klass][method_id] = path
+      end
+
+      return @method_location_cache[klass][method_id]
+    end
+
+    def under_module?(klass, mod)
       ks = non_singleton_class(klass).to_s
       ms = mod.to_s
       return ks == ms || ks.start_with?(ms + "::")
@@ -200,13 +221,13 @@ module Argtrace
           p = Parameter.new
           p.mode = param[0]
           p.name = param[1]
-          if param[1] == :* || param[1] == :&
+          if param[0] == :block
+            p.type = Signature.new
+          elsif param[1] == :* || param[1] == :&
             # workaround for ActiveSupport gem.
             # I don't know why this happen. just discard info about it.
             type = TypeUnion.new
             p.type = type
-          elsif param[0] == :block
-            p.type = Signature.new
           else
             # TODO: this part is performance bottleneck caused by eval,
             # but It's essential code
