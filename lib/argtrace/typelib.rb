@@ -222,35 +222,5 @@ module Argtrace
     end
 
   end
-
 end
 
-module Nokogiri
-  class TESTX
-    def foo(x: , a: 0, b: "test", &block)
-      block.call(x)
-    end
-  end
-end
-
-typelib = Argtrace::TypeLib.new
-tracer = Argtrace::Tracer.new
-tracer.set_filter do |tp|
-  # if tracer.under_module?(tp.defined_class, "Nokogiri")
-  if tracer.under_path?(tp.defined_class, tp.method_id, __dir__)
-    true
-  else
-    false
-  end
-end
-tracer.set_notify do |ev, callinfo|
-  if ev == :return
-    typelib.learn(callinfo.signature)
-  end
-end
-tracer.set_exit do
-  puts typelib.to_rbs
-end
-tracer.start_trace
-Nokogiri::TESTX.new.foo(x: 1){|x| }
-Nokogiri::TESTX.new.foo(x: "1"){|x| }

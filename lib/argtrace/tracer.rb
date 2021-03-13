@@ -72,6 +72,9 @@ module Argtrace
 
       # cache of method location (klass => method_id => source_path)
       @method_location_cache = Hash.new{|h, klass| h[klass] = {}}
+
+      # cache of judge result whether method is library-defined or user-defined
+      @ignore_paths_cache = {}
     end
 
     # entry point of trace event
@@ -147,9 +150,26 @@ module Argtrace
       end
     end
 
-    def under_path?(klass, method_id, path)
-      source_path = get_location(klass, method_id)
-      return source_path && source_path.start_with?(path)
+    def user_source?(klass, method_id)
+      path = get_location(klass, method_id)
+      return false unless path
+
+      unless @ignore_paths_cache.key?(path)
+        if path.start_with?("<internal:")
+          # skip all ruby internal method
+          @ignore_paths_cache[path] = true
+        elsif path == "(eval)"
+          # skip all eval
+          @ignore_paths_cache[path] = true
+        else
+          # skip all sources under load path
+          @ignore_paths_cache[path] = $LOAD_PATH.any?{|x| path.start_with?(x)}
+        end
+      end
+      # unless @ignore_paths_cache[path]
+      #   p [tp.defined_class, tp.method_id, path]
+      # end
+      return ! @ignore_paths_cache[path]
     end
 
     def get_location(klass, method_id)
