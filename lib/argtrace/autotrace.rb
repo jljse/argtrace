@@ -1,6 +1,8 @@
 module Argtrace
+  # Default tracing setting.
   class AutoTrace
-    def self.main
+    # Default tracing setting. Analyse only user sources, and output them into RBS file.
+    def self.main(rbs_path: "sig.rbs")
       typelib = Argtrace::TypeLib.new
       tracer = Argtrace::Tracer.new
       ignore_paths_cache = {}
@@ -20,7 +22,7 @@ module Argtrace
       end
 
       tracer.set_exit do
-        File.open("sig.rbs", "w") do |f|
+        File.open(rbs_path, "w") do |f|
           f.puts typelib.to_rbs
         end
       end

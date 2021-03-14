@@ -32,13 +32,14 @@ Argtrace::AutoTrace.main()
 
 ... (YOUR PROGRAM HERE) ...
 ```
+RBS file is saved as "sig.rbs" in current directory.
 
 ### 2. Implicit trace
 Currently not supported yet.
 
 ## Contributing
 
-Bug reports and pull requests are welcome on GitHub at https://github.com/[USERNAME]/argtrace.
+Bug reports and pull requests are welcome on GitHub at https://github.com/jljse/argtrace.
 
 ## License
 

@@ -1,6 +1,7 @@
 
 module Argtrace
 
+  # signature of method/block 
   class Signature
     attr_accessor :defined_class, :method_id, :is_singleton_method, :params, :return_type
 
@@ -55,6 +56,7 @@ module Argtrace
     end
   end
 
+  # instance for one parameter
   class Parameter
     attr_accessor :mode, :name, :type
 
@@ -71,6 +73,7 @@ module Argtrace
     end
   end
 
+  # Union of types (e.g. String | Integer)
   class TypeUnion
     attr_accessor :union;
 
@@ -113,9 +116,11 @@ module Argtrace
     end
   end
 
+  # placeholder for TrueClass / FalseClass
   class BooleanClass
   end
 
+  # type in RBS manner
   class Type
     attr_accessor :data, :subdata
 

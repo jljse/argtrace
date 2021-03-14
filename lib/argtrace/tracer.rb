@@ -1,9 +1,14 @@
 module Argtrace
 
+  # instance per method/block call
   class CallInfo
-    attr_accessor :signature, :block_proc
+    attr_accessor :signature
+
+    # actual block instance
+    attr_accessor :block_proc
   end
 
+  # call stack of tracing targets
   class CallStack
     def initialize
       # thread.object_id => stack
@@ -54,6 +59,14 @@ module Argtrace
     end
   end
 
+  # class definition related operation and result caching.
+  class DefinitionResolver
+    def initialize
+      # TODO:      
+    end
+  end
+
+  # Main class for tracing with TracePoint.
   class Tracer
     attr_accessor :is_dead
 
@@ -150,6 +163,7 @@ module Argtrace
       end
     end
 
+    # true if method is defined in user source
     def user_source?(klass, method_id)
       path = get_location(klass, method_id)
       return false unless path
@@ -166,9 +180,6 @@ module Argtrace
           @ignore_paths_cache[path] = $LOAD_PATH.any?{|x| path.start_with?(x)}
         end
       end
-      # unless @ignore_paths_cache[path]
-      #   p [tp.defined_class, tp.method_id, path]
-      # end
       return ! @ignore_paths_cache[path]
     end
 
@@ -185,6 +196,7 @@ module Argtrace
       return @method_location_cache[klass][method_id]
     end
 
+    # true if klass is defined under Module
     def under_module?(klass, mod)
       ks = non_singleton_class(klass).to_s
       ms = mod.to_s
@@ -405,14 +417,6 @@ module Argtrace
       end
 
       tp.enable
-    end
-
-    # convinience method
-    def self.start(&notify_block)
-      tracer = Tracer.new()
-      tracer.set_notify(&notify_block)
-      tracer.start_trace()
-      return tracer
     end
 
   end

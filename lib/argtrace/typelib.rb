@@ -2,6 +2,7 @@ require 'set'
 
 module Argtrace
 
+  # Store of signatures
   class TypeLib
     # class => { method_id => [normal_method_signature, singleton_method_signature] }
     def lib
@@ -57,6 +58,7 @@ module Argtrace
     end
   end
 
+  # helper to convert TypeLib into RBS. OutputMoudle acts like Module tree node.
   class OutputModule
     attr_accessor :actual_module, :name, :children, :signatures
 
@@ -78,6 +80,7 @@ module Argtrace
       add_signature_inner(constname, signature)
     end
 
+    # split class name into consts (e.g. Argtrace::TypeLib to ["Argtrace", "TypeLib"])
     def class_const_name(klass)
       if /^[A-Za-z0-9_:]+$/ =~ klass.to_s
         # this should be normal name
