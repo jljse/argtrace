@@ -135,7 +135,11 @@ module Argtrace
 
     def self.new_with_type(actual_type)
       ret = Type.new
-      ret.data = actual_type
+      if actual_type == TrueClass || actual_type == FalseClass
+        ret.data = BooleanClass
+      else
+        ret.data = actual_type
+      end
       return ret
     end
 

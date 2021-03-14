@@ -44,9 +44,10 @@ module Argtrace
       @lib.keys.sort_by{|x| x.to_s}.each do |klass|
         klass_methods = @lib[klass]
 
-        [0, 1].each do |index|
+        # output instance method first, and then output singleton method.
+        [0, 1].each do |instance_or_singleton|
           klass_methods.keys.sort.each do |method_id|
-            sig = klass_methods[method_id][index]
+            sig = klass_methods[method_id][instance_or_singleton]
             next unless sig
 
             mod_root.add_signature(sig)
