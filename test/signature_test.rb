@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require_relative "signature_helper"
 
 class TypeTest < Minitest::Test
   def test_equal
@@ -141,25 +142,7 @@ end
 
 
 class SignatureTest < Minitest::Test
-  def params_from(hashes)
-    ret = []
-    hashes.each_pair do |name, types|
-      param = Argtrace::Parameter.new
-      param.mode = :req
-      param.name = name
-      param.type = typeunion_from(types)
-      ret << param
-    end
-    return ret
-  end
-  def typeunion_from(types)
-    union = Argtrace::TypeUnion.new
-    types.each do |type|
-      t = Argtrace::Type.new_with_type(type)
-      union.add(t)
-    end
-    return union
-  end
+  include SignatureHelper
   
   def test_merge
     sig1 = Argtrace::Signature.new
