@@ -1,6 +1,6 @@
 # Argtrace
 
-Argtrace is a Ruby method type analyser.
+Argtrace is a Ruby MRI method type analyser.
 
 Argtrace uses TracePoint and traces all of method calling,
 peeks actual type of parameters and return value,
@@ -38,6 +38,11 @@ RBS file is saved as "sig.rbs" in current directory.
 $ ruby -r argtrace/autorun  YOUR_PROGRAM_HERE.rb
 ```
 RBS file is saved as "sig.rbs" in current directory.
+
+### Restriction
+Argtrace cannot work with C-extension,
+because TracePoint doesn't provide feature to access arguments of calls into C-extension.
+
 
 ## Contributing
 
