@@ -14,16 +14,6 @@ class TracerTest < Minitest::Test
     end
   end
 
-  def signature_from(klass, method_id, params_hash, ret_type)
-    sig = Argtrace::Signature.new
-    sig.defined_class = klass
-    sig.method_id = method_id
-    sig.params = params_from(params_hash)
-    sig.return_type = typeunion_from(ret_type)
-    sig.is_singleton_method = false
-    return sig
-  end
-
   def test_learn
     lib = Argtrace::TypeLib.new
     lib.learn(signature_from(X, :foo, {x: [String], y: [Integer]}, [String]))
@@ -42,5 +32,12 @@ class TracerTest < Minitest::Test
     ans_bar_ret = typeunion_from([NilClass, TrueClass])
     assert_equal 0, lib.lib[X][:bar][0].params.size
     assert_equal_typeunion ans_bar_ret, lib.lib[X][:bar][0].return_type
+  end
+end
+
+
+class OutputModuleTest < Minitest::Test
+  def test_add_signature
+    
   end
 end

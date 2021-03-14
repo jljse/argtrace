@@ -25,17 +25,19 @@ Or install it yourself as:
 ## Usage
 
 ### 1. Explicit trace
-
 ```ruby
 require 'argtrace'
-Argtrace::AutoTrace.main()
+Argtrace::Default.main(rbs_path: "sig.rbs")
 
 ... (YOUR PROGRAM HERE) ...
 ```
 RBS file is saved as "sig.rbs" in current directory.
 
 ### 2. Implicit trace
-Currently not supported yet.
+```console
+$ ruby -r argtrace/autorun  YOUR_PROGRAM_HERE.rb
+```
+RBS file is saved as "sig.rbs" in current directory.
 
 ## Contributing
 
