@@ -5,7 +5,6 @@ module Argtrace
     def self.main(rbs_path: "sig.rbs")
       typelib = Argtrace::TypeLib.new
       tracer = Argtrace::Tracer.new
-      ignore_paths_cache = {}
 
       tracer.set_filter do |tp|
         if [:call, :return].include?(tp.event)

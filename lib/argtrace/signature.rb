@@ -93,6 +93,10 @@ module Argtrace
           # already in union
           return
         end
+        if @union[i].superclass_of?(type)
+          # already in union
+          return
+        end
         if type.superclass_of?(@union[i])
           # remove redundant element
           @union[i] = nil
@@ -171,7 +175,12 @@ module Argtrace
       return @data == other.data && @subdata == other.subdata
     end
 
+    def eql?(other)
+      self.==(other)
+    end
+
     # true if self(Type) includes other(Type) as type declaration
+    # false if self and other is same Type.
     def superclass_of?(other)
       if other.class != Type
         raise TypeError, "parameter must be Argtrace::Type"
