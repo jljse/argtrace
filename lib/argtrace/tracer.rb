@@ -1,3 +1,5 @@
+require 'pathname'
+
 module Argtrace
 
   # instance per method/block call
@@ -143,7 +145,7 @@ module Argtrace
 
         if !skip_flag && @prune_event_count == 0
           # skip if it's object specific method
-          @notify_block.call(tp.event, callinfo)
+          @notify_block.call(tp.event, callinfo) if @notify_block
         end
       else
         case check_event_filter(tp)
@@ -157,10 +159,18 @@ module Argtrace
         callinfo = @callstack.pop_callstack(tp)
         if callinfo
           if !skip_flag && @prune_event_count == 0
-            @notify_block.call(tp.event, callinfo)
+            @notify_block.call(tp.event, callinfo) if @notify_block
           end
         end
       end
+    end
+
+    def standard_lib_root_path
+      # Search for standard lib path by some method location.
+      # I choose Pathname#parent here.
+      path = get_location(Pathname, :parent)
+      lib_dir = File.dirname(path)
+      return lib_dir
     end
 
     # true if method is defined in user source
@@ -175,9 +185,14 @@ module Argtrace
         elsif path == "(eval)"
           # skip all eval
           @ignore_paths_cache[path] = true
+        elsif path.start_with?(standard_lib_root_path())
+          # skip all standard lib
+          @ignore_paths_cache[path] = true
+        elsif Gem.path.any?{|x| path.start_with?(x)}
+          # skip all installed gem files
+          @ignore_paths_cache[path] = true
         else
-          # skip all sources under load path
-          @ignore_paths_cache[path] = $LOAD_PATH.any?{|x| path.start_with?(x)}
+          @ignore_paths_cache[path] = false
         end
       end
       return ! @ignore_paths_cache[path]
@@ -383,12 +398,21 @@ module Argtrace
       @notify_block = notify_block
     end
 
+    def call_exit
+      @exit_block.call if @exit_block
+    end
+
     def enable
       @tp_holder.enable
     end
 
     def disable
       @tp_holder.disable
+    end
+
+    def stop_trace()
+      self.disable
+      Tracer.remove_running_trace(self)
     end
 
     # start TracePoint with callback block
@@ -410,13 +434,32 @@ module Argtrace
       end
       @tp_holder = tp
 
-      at_exit do
-        # hold Tracer reference in closure
-        self.disable
-        @exit_block.call if @exit_block
-      end
+      # hold reference and register at_exit
+      Tracer.add_running_trace(self)
 
       tp.enable
+    end
+    
+    @@running_trace_first = true
+    @@running_trace = []
+    def self.add_running_trace(trace)
+      @@running_trace << trace
+      if @@running_trace_first
+        @@running_trace_first = false
+        at_exit do
+          @@running_trace.each do |trace|
+            trace.disable
+          end
+          @@running_trace.each do |trace|
+            trace.call_exit
+          end
+          @@running_trace.clear
+        end
+      end
+    end
+
+    def self.remove_running_trace(trace)
+      @@running_trace.delete(trace)
     end
 
   end

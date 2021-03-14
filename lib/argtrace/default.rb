@@ -1,6 +1,6 @@
 module Argtrace
   # Default tracing setting.
-  class AutoTrace
+  class Default
     # Default tracing setting. Analyse only user sources, and output them into RBS file.
     def self.main(rbs_path: "sig.rbs")
       typelib = Argtrace::TypeLib.new
