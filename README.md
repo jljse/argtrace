@@ -39,7 +39,7 @@ $ ruby -r argtrace/autorun  YOUR_PROGRAM_HERE.rb
 ```
 RBS file is saved as "sig.rbs" in current directory.
 
-### 3. rspec
+### 3. RSpec in gem
 Modify Rakefile to load Argtrace.
 ```ruby
 RSpec::Core::RakeTask.new(:spec) do |t|
@@ -47,6 +47,19 @@ RSpec::Core::RakeTask.new(:spec) do |t|
 end
 ```
 then run as usual like `rake spec`.
+RBS file is saved as "sig.rbs" in current directory.
+
+### 4. Minitest in gem
+Modify global helper under test/ to load Argtrace. For example:
+```ruby
+require "argtrace/autorun"
+require "minitest/autorun"
+```
+And add Argtrace to Gemfile
+```ruby
+gem "argtrace"
+```
+then run as usual like `rake test`.
 RBS file is saved as "sig.rbs" in current directory.
 
 ### Restriction
