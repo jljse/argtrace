@@ -39,10 +39,20 @@ $ ruby -r argtrace/autorun  YOUR_PROGRAM_HERE.rb
 ```
 RBS file is saved as "sig.rbs" in current directory.
 
-### Restriction
-Argtrace cannot work with C-extension,
-because TracePoint doesn't provide feature to access arguments of calls into C-extension.
+### 3. rspec
+Modify Rakefile to load Argtrace.
+```ruby
+RSpec::Core::RakeTask.new(:spec) do |t|
+  t.ruby_opts = %w[-r argtrace/autorun]
+end
+```
+then run as usual like `rake spec`.
+RBS file is saved as "sig.rbs" in current directory.
 
+### Restriction
+- Argtrace cannot work with C-extension,
+  because TracePoint doesn't provide feature to access arguments of calls into C-extension.
+- Only work with single-thread programs.
 
 ## Contributing
 
