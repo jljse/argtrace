@@ -8,8 +8,11 @@ module Argtrace
 
       tracer.set_filter do |tp|
         if [:call, :return].include?(tp.event)
-          tracer.user_source?(tp.defined_class, tp.method_id)
+          ret = tracer.user_source?(tp.defined_class, tp.method_id)
+          # $stderr.puts [tp.event, tp.defined_class, tp.method_id].inspect if ret
+          ret
         else
+          # $stderr.puts [tp.event, tp.defined_class, tp.method_id].inspect if ret
           true
         end
       end
@@ -17,6 +20,7 @@ module Argtrace
       tracer.set_notify do |ev, callinfo|
         if ev == :return
           typelib.learn(callinfo.signature)
+          # $stderr.puts callinfo.signature.inspect
         end
       end
 

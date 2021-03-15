@@ -49,12 +49,16 @@ module Argtrace
     end
 
     # find callinfo which use specific block
-    def find_by_block_location(path, lineno)
+    def find_by_block_location(tp)
       id = Thread.current.object_id
       ret = []
       @stack[id].each do |info|
-        if info.block_proc && info.block_proc.source_location == [path, lineno]
-          ret << info
+        if info.block_proc && info.block_proc.source_location == [tp.path, tp.lineno]
+          # Warning: sometimes different block has same location.
+          # I cannot handle such case strictly, but use heuristics by comparing parameter names.
+          if tp.parameters.map{|x| x[1]} == info.block_proc.parameters.map{|x| x[1]}
+            ret << info
+          end
         end
       end
       return ret
@@ -107,10 +111,13 @@ module Argtrace
 
     # process block call/return event
     def trace_block_event(tp)
+      return if tp.event != :b_call
+
       # I cannot determine the called block instance directly, so use block's location.
-      callinfos_with_block = @callstack.find_by_block_location(tp.path, tp.lineno)
+      callinfos_with_block = @callstack.find_by_block_location(tp)
       callinfos_with_block.each do |callinfo|
         block_param = callinfo.signature.get_block_param
+        # $stderr.puts [tp.event, tp.path, tp.lineno, callinfo.block_proc.parameters, tp.parameters].inspect
         block_param_types = get_param_types(callinfo.block_proc.parameters, tp)
         # TODO: return type (but maybe, there is no demand)
         block_param.type.merge(block_param_types, nil)
