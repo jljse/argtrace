@@ -17,7 +17,7 @@ module Argtrace
       }
     end
 
-    CLASS_NAME_PATTERN = "[A-Z][A-Za-z0-9_]*"
+    CLASS_NAME_PATTERN = '[A-Z][A-Za-z0-9_]*'
     def api_class?(klass)
       if /\A(#{CLASS_NAME_PATTERN})(::#{CLASS_NAME_PATTERN})*\z/ =~ klass.to_s
         return true
@@ -27,8 +27,8 @@ module Argtrace
       end
     end
 
-    NORMAL_METHOD_NAME_PATTERN = "[A-Za-z0-9_]+[=?!]?"
-    OPERATOR_METHOD_NAME_PATTERN = "[!%&=\-~^|\[+*\]<>\/]+"
+    NORMAL_METHOD_NAME_PATTERN = '[A-Za-z0-9_]+[=?!]?'
+    OPERATOR_METHOD_NAME_PATTERN = '[!%&=\-~^|\[+*\]<>\/]+'
     def api_method?(method_id)
       if /\A((#{NORMAL_METHOD_NAME_PATTERN})|(#{OPERATOR_METHOD_NAME_PATTERN}))\z/ =~ method_id.to_s
         return true
