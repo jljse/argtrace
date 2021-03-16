@@ -17,7 +17,38 @@ module Argtrace
       }
     end
 
+    CLASS_NAME_PATTERN = "[A-Z][A-Za-z0-9_]*"
+    def api_class?(klass)
+      if /\A(#{CLASS_NAME_PATTERN})(::#{CLASS_NAME_PATTERN})*\z/ =~ klass.to_s
+        return true
+      else
+        # this must not be interface class
+        return false
+      end
+    end
+
+    NORMAL_METHOD_NAME_PATTERN = "[A-Za-z0-9_]+[=?!]?"
+    OPERATOR_METHOD_NAME_PATTERN = "[!%&=\-~^|\[+*\]<>\/]+"
+    def api_method?(method_id)
+      if /\A((#{NORMAL_METHOD_NAME_PATTERN})|(#{OPERATOR_METHOD_NAME_PATTERN}))\z/ =~ method_id.to_s
+        return true
+      else
+        # this must not be interface method
+        return false
+      end
+    end
+
     def ready_signature(signature)
+      return nil unless api_class?(signature.defined_class)
+      return nil unless api_method?(signature.method_id)
+
+      # DEBUG:
+      # if not @lib.key?(signature.defined_class)
+      #   p [signature.defined_class, signature.method_id, signature.defined_class.to_s, signature.method_id.to_s]
+      # elsif not @lib[signature.defined_class].key?(signature.method_id)
+      #   p [signature.defined_class, signature.method_id, signature.defined_class.to_s, signature.method_id.to_s]
+      # end
+
       pair = @lib[signature.defined_class][signature.method_id]
       index = signature.is_singleton_method ? 1 : 0
       unless pair[index]
@@ -31,8 +62,49 @@ module Argtrace
       return pair[index]
     end
 
+    # remove non-api class from type signature
+    def discard_noise_from_signature(signature)
+      signature.params.each do |param|
+        if param.mode == :block
+          discard_noise_from_signature(param.type)
+        else
+          discard_noise_from_typeunion(param.type)
+        end
+      end
+      discard_noise_from_typeunion(signature.return_type)
+    end
+
+    def discard_noise_from_typeunion(typeunion)
+      return unless typeunion
+      typeunion.union.delete_if{|type| noise_type?(type)}
+    end
+
+    def noise_type?(type)
+      if type.data.is_a?(Symbol)
+        return false
+      end
+      if type.data.is_a?(Array)
+        if type.subdata == nil
+          return false
+        end
+        return !api_class?(type.subdata)
+      end
+      if type.data.is_a?(Class)
+        return !api_class?(type.data)
+      end
+      raise "Unexpected type data : #{type}"
+    end
+
+    # add signature into type library
     def learn(signature)
-      ready_signature(signature).merge(signature.params, signature.return_type)
+      sig = ready_signature(signature)
+      if sig
+        discard_noise_from_signature(signature)
+        sig.merge(signature.params, signature.return_type)
+      else
+        # skip
+        # $stderr.puts [:skip, signature].inspect
+      end
     end
 
     def to_rbs
@@ -40,6 +112,9 @@ module Argtrace
       # TODO: private/public
       # TODO: attr_reader/attr_writer/attr_accessor
       mod_root = OutputModule.new
+
+      # DEBUG:
+      # $stderr.puts @lib.inspect
 
       @lib.keys.sort_by{|x| x.to_s}.each do |klass|
         klass_methods = @lib[klass]
@@ -50,7 +125,15 @@ module Argtrace
             sig = klass_methods[method_id][instance_or_singleton]
             next unless sig
 
-            mod_root.add_signature(sig)
+            begin
+              mod_root.add_signature(sig)
+            rescue => e
+              $stderr.puts "----- argtrace bug -----"
+              $stderr.puts "#{klass}::#{method_id} (#{sig})"
+              $stderr.puts e.full_message
+              $stderr.puts "------------------------"
+              raise
+            end
           end
         end
       end
@@ -73,33 +156,13 @@ module Argtrace
       @actual_module = Kernel
 
       constname = class_const_name(signature.defined_class)
-      unless constname
-        # cannot handle this
-        return
-      end
-
       add_signature_inner(constname, signature)
     end
 
     # split class name into consts (e.g. Argtrace::TypeLib to ["Argtrace", "TypeLib"])
+    # bad name class is already sanitized, just split.
     def class_const_name(klass)
-      if /^[A-Za-z0-9_:]+$/ =~ klass.to_s
-        # this should be normal name
-        consts = klass.to_s.split("::")
-
-        # assertion
-        resolved_class = consts.inject(Kernel){|mod, const| mod.const_get(const)}
-        if klass != resolved_class
-          $stderr.puts "----- argtrace bug -----"
-          $stderr.puts "#{klass} => #{consts} => #{resolved_class}"
-          $stderr.puts "------------------------"
-          raise "Failed to resolve class by constant"
-        end
-
-        return consts
-      else
-        return nil
-      end
+      klass.to_s.split("::")
     end
 
     def add_signature_inner(name_consts, signature)
@@ -190,6 +253,12 @@ module Argtrace
       if typeunion.union.size == 1 and NilClass == typeunion.union.first.data
         # TODO: I can't distinguish nil and untyped.
         return "untyped"
+      end
+      if typeunion.union.count{|x| x.data.is_a?(Symbol)} >= 16
+        # too much symbols, this should not be enum.
+        symbols = typeunion.union.select{|x| x.data.is_a?(Symbol)}
+        typeunion.union.delete_if{|x| x.data.is_a?(Symbol)}
+        typeunion.add(Type.new_with_type(Symbol))
       end
       if typeunion.union.size == 2 and typeunion.union.any?{|x| NilClass == x.data}
         # type is nil and sometype, so represent it as "sometype?"
