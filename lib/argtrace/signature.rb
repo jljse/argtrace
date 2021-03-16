@@ -1,4 +1,3 @@
-
 module Argtrace
 
   # signature of method/block 
@@ -10,6 +9,10 @@ module Argtrace
       @params = []
     end
 
+    def signature_for_block?
+      @method_id == nil
+    end
+
     def merge(all_params, ret)
       unless @params
         @params = []
@@ -19,8 +22,10 @@ module Argtrace
         if i == @params.size
           @params << all_params[i]  # TODO: dup
         else
-          if @params[i].mode == all_params[i].mode &&
-              @params[i].name == all_params[i].name
+          same_mode = @params[i].mode == all_params[i].mode
+          same_name = @params[i].name == all_params[i].name
+          # allow name changing only for block call
+          if same_mode && (signature_for_block? || same_name)
             if all_params[i].mode == :block
               # TODO: buggy
               # merging of block parameter type is quite tricky...
