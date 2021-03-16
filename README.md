@@ -39,17 +39,17 @@ $ ruby -r argtrace/autorun  YOUR_PROGRAM_HERE.rb
 ```
 RBS file is saved as "sig.rbs" in current directory.
 
-### 3. RSpec in gem
+### 3. Rakefile
 Modify Rakefile to load Argtrace.
 ```ruby
 RSpec::Core::RakeTask.new(:spec) do |t|
   t.ruby_opts = %w[-r argtrace/autorun]
 end
 ```
-then run as usual like `rake spec`.
+then run as usual like `rake test`.
 RBS file is saved as "sig.rbs" in current directory.
 
-### 4. Minitest in gem
+### 4. Minitest
 Modify global helper under test/ to load Argtrace. For example:
 ```ruby
 require "argtrace/autorun"
