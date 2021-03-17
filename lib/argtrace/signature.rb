@@ -212,6 +212,7 @@ module Argtrace
           return false
         end
       else
+        # both data should be Class, just compare them
         return other.data < @data
       end
     end

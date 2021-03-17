@@ -41,9 +41,6 @@ module Argtrace
               #{@stack[id].map{|x| x.signature.to_s}.join("\n  ")}
           EOF
         end
-        type = TypeUnion.new
-        type.add(Type.new_with_value(tp.return_value))
-        ent.signature.return_type = type
       end
       return ent
     end
@@ -165,6 +162,10 @@ module Argtrace
 
         callinfo = @callstack.pop_callstack(tp)
         if callinfo
+          rettype = TypeUnion.new
+          rettype.add(Type.new_with_value(tp.return_value))
+          callinfo.signature.return_type = rettype
+             
           if !skip_flag && @prune_event_count == 0
             @notify_block.call(tp.event, callinfo) if @notify_block
           end
@@ -467,6 +468,12 @@ module Argtrace
 
     def self.remove_running_trace(trace)
       @@running_trace.delete(trace)
+    end
+
+    def self.force_stop_all
+      @@running_trace.each do |t|
+        t.disable
+      end
     end
 
   end

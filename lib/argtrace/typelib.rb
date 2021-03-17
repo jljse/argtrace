@@ -15,27 +15,35 @@ module Argtrace
           hmethod[method_id] = [nil, nil]
         }
       }
+      @api_class_cache = {}
+      @api_symbol_cache = {}
     end
 
     CLASS_NAME_PATTERN = '[A-Z][A-Za-z0-9_]*'
     def api_class?(klass)
-      if /\A(#{CLASS_NAME_PATTERN})(::#{CLASS_NAME_PATTERN})*\z/ =~ klass.to_s
-        return true
-      else
-        # this must not be interface class
-        return false
+      unless @api_class_cache.key?(klass)
+        if /\A(#{CLASS_NAME_PATTERN})(::#{CLASS_NAME_PATTERN})*\z/ =~ klass.to_s
+          @api_class_cache[klass] = true
+        else
+          # this must not be interface class
+          @api_class_cache[klass] = false
+        end
       end
+      return @api_class_cache[klass]
     end
 
     NORMAL_METHOD_NAME_PATTERN = '[A-Za-z0-9_]+[=?!]?'
     OPERATOR_METHOD_NAME_PATTERN = '[!%&=\-~^|\[+*\]<>\/]+'
     def api_method?(method_id)
-      if /\A((#{NORMAL_METHOD_NAME_PATTERN})|(#{OPERATOR_METHOD_NAME_PATTERN}))\z/ =~ method_id.to_s
-        return true
-      else
-        # this must not be interface method
-        return false
+      unless @api_symbol_cache.key?(method_id)
+        if /\A((#{NORMAL_METHOD_NAME_PATTERN})|(#{OPERATOR_METHOD_NAME_PATTERN}))\z/ =~ method_id.to_s
+          @api_symbol_cache[method_id] = true
+        else
+          # this must not be interface method
+          @api_symbol_cache[method_id] = false
+        end
       end
+      return @api_symbol_cache[method_id]
     end
 
     def ready_signature(signature)
@@ -256,7 +264,6 @@ module Argtrace
       end
       if typeunion.union.count{|x| x.data.is_a?(Symbol)} >= 16
         # too much symbols, this should not be enum.
-        symbols = typeunion.union.select{|x| x.data.is_a?(Symbol)}
         typeunion.union.delete_if{|x| x.data.is_a?(Symbol)}
         typeunion.add(Type.new_with_type(Symbol))
       end
